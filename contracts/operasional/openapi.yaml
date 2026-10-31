@@ -1,0 +1,293 @@
+openapi: 3.1.0
+
+info:
+  title: API Layanan Operasional Jackrabbit Coffee Bar
+  version: 1.0.0
+  description: >
+    API untuk melihat pesanan yang telah dikonfirmasi dan memperbarui
+    status pengerjaannya oleh bagian operasional.
+
+servers:
+  - url: http://localhost:8082/api/v1
+    description: Lingkungan pengembangan lokal
+
+tags:
+  - name: Operasional
+    description: Pengelolaan pesanan oleh bagian operasional
+
+paths:
+  /pesanan:
+    get:
+      tags:
+        - Operasional
+      operationId: daftarPesananOperasional
+      summary: Menampilkan daftar pesanan operasional
+      description: >
+        Mengambil seluruh pesanan yang telah diterima dari event
+        PesananDikonfirmasi. Hasil dapat disaring berdasarkan status
+        operasional.
+      parameters:
+        - name: status_operasional
+          in: query
+          required: false
+          description: Menyaring pesanan berdasarkan status operasional
+          schema:
+            $ref: '#/components/schemas/StatusOperasional'
+      responses:
+        '200':
+          description: Daftar pesanan operasional berhasil diperoleh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaftarPesananResponse'
+        '500':
+          $ref: '#/components/responses/KesalahanInternal'
+
+  /pesanan/{kode}:
+    get:
+      tags:
+        - Operasional
+      operationId: lihatPesananOperasional
+      summary: Menampilkan detail pesanan operasional
+      description: >
+        Mengambil detail satu pesanan beserta seluruh item berdasarkan
+        kode pesanan.
+      parameters:
+        - $ref: '#/components/parameters/KodePesanan'
+      responses:
+        '200':
+          description: Detail pesanan operasional berhasil diperoleh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PesananResponse'
+        '404':
+          $ref: '#/components/responses/PesananTidakDitemukan'
+        '500':
+          $ref: '#/components/responses/KesalahanInternal'
+
+  /pesanan/{kode}/status:
+    patch:
+      tags:
+        - Operasional
+      operationId: perbaruiStatusPesananOperasional
+      summary: Memperbarui status pengerjaan pesanan
+      description: >
+        Status hanya dapat bergerak maju dengan urutan
+        menunggu_diproses, sedang_diproses, siap_diambil, lalu selesai.
+      parameters:
+        - $ref: '#/components/parameters/KodePesanan'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerbaruiStatusRequest'
+      responses:
+        '200':
+          description: Status operasional berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PesananResponse'
+        '404':
+          $ref: '#/components/responses/PesananTidakDitemukan'
+        '409':
+          $ref: '#/components/responses/PerubahanStatusTidakValid'
+        '422':
+          $ref: '#/components/responses/RequestTidakValid'
+        '500':
+          $ref: '#/components/responses/KesalahanInternal'
+
+components:
+  parameters:
+    KodePesanan:
+      name: kode
+      in: path
+      required: true
+      description: Kode unik pesanan
+      schema:
+        type: string
+        example: PSN-000001
+
+  responses:
+    PesananTidakDitemukan:
+      description: Pesanan operasional tidak ditemukan
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    PerubahanStatusTidakValid:
+      description: Perubahan status operasional tidak diperbolehkan
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    RequestTidakValid:
+      description: Payload permintaan tidak valid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    KesalahanInternal:
+      description: Terjadi kesalahan internal
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    StatusOperasional:
+      type: string
+      enum:
+        - menunggu_diproses
+        - sedang_diproses
+        - siap_diambil
+        - selesai
+      example: menunggu_diproses
+
+    PerbaruiStatusRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - status_operasional
+      properties:
+        status_operasional:
+          $ref: '#/components/schemas/StatusOperasional'
+
+    DaftarPesananResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RingkasanPesananOperasional'
+
+    PesananResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/PesananOperasional'
+
+    RingkasanPesananOperasional:
+      type: object
+      additionalProperties: false
+      required:
+        - kode_pesanan
+        - kanal
+        - nama_pelanggan
+        - status_pesanan
+        - status_operasional
+        - total
+        - occurred_at
+        - received_at
+      properties:
+        kode_pesanan:
+          type: string
+          example: PSN-000001
+        kanal:
+          type: string
+          example: grabfood
+        nama_pelanggan:
+          type: string
+          example: Andi
+        status_pesanan:
+          type: string
+          enum:
+            - dikonfirmasi
+          example: dikonfirmasi
+        status_operasional:
+          $ref: '#/components/schemas/StatusOperasional'
+        total:
+          type: integer
+          minimum: 0
+          example: 50000
+        occurred_at:
+          type: string
+          format: date-time
+          example: '2026-10-31T03:18:12+00:00'
+        received_at:
+          type: string
+          format: date-time
+          example: '2026-10-31T03:18:13+00:00'
+
+    PesananOperasional:
+      allOf:
+        - $ref: '#/components/schemas/RingkasanPesananOperasional'
+        - type: object
+          additionalProperties: false
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/PesananItem'
+
+    PesananItem:
+      type: object
+      additionalProperties: false
+      required:
+        - kode_menu
+        - nama_menu
+        - jumlah
+        - harga_satuan
+        - subtotal
+      properties:
+        kode_menu:
+          type: string
+          example: MNU-001
+        nama_menu:
+          type: string
+          example: Cafe Latte
+        jumlah:
+          type: integer
+          minimum: 1
+          example: 2
+        harga_satuan:
+          type: integer
+          minimum: 0
+          example: 25000
+        subtotal:
+          type: integer
+          minimum: 0
+          example: 50000
+
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          example: about:blank
+        title:
+          type: string
+          example: Request tidak valid
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+          example: 422
+        detail:
+          type: string
+          example: Status operasional wajib diisi.
+        instance:
+          type: string
+          example: /api/v1/pesanan/PSN-000001/status

@@ -1,0 +1,380 @@
+openapi: 3.0.3
+
+info:
+  title: API Layanan Inventori Jackrabbit Coffee Bar
+  version: 0.1.0
+  description: >
+    Kontrak REST design-first untuk data menu, pemeriksaan stok,
+    dan pengurangan stok.
+
+servers:
+  - url: /api/v1
+    description: Base path API versi 1
+
+tags:
+  - name: Inventori
+    description: Data menu dan pengelolaan stok.
+
+paths:
+  /menu/{kode}:
+    get:
+      tags:
+        - Inventori
+      operationId: lihatMenu
+      summary: Melihat detail menu
+      description: >
+        Mengambil nama, harga, dan stok menu berdasarkan kode menu.
+        Data dari Layanan Inventori menjadi sumber kebenaran.
+      parameters:
+        - name: kode
+          in: path
+          required: true
+          description: Kode menu
+          schema:
+            type: string
+          example: MNU-001
+      responses:
+        '200':
+          description: Detail menu berhasil ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+              example:
+                data:
+                  kode_menu: MNU-001
+                  nama_menu: Cafe Latte
+                  harga_satuan: 25000
+                  stok: 20
+        '404':
+          $ref: '#/components/responses/MenuTidakDitemukan'
+        '500':
+          $ref: '#/components/responses/KesalahanInternal'
+
+  /stok/cek:
+    post:
+      tags:
+        - Inventori
+      operationId: cekStok
+      summary: Memeriksa ketersediaan stok
+      description: >
+        Memeriksa ketersediaan seluruh item tanpa mengurangi stok.
+        Hasil keseluruhan tersedia hanya bernilai true apabila semua
+        item memiliki stok yang mencukupi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CekStokRequest'
+            example:
+              items:
+                - kode_menu: MNU-001
+                  jumlah: 2
+                - kode_menu: MNU-002
+                  jumlah: 1
+      responses:
+        '200':
+          description: Pemeriksaan stok berhasil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CekStokResponse'
+              example:
+                data:
+                  tersedia: true
+                  items:
+                    - kode_menu: MNU-001
+                      jumlah_diminta: 2
+                      stok_tersedia: 20
+                      tersedia: true
+                    - kode_menu: MNU-002
+                      jumlah_diminta: 1
+                      stok_tersedia: 10
+                      tersedia: true
+        '404':
+          $ref: '#/components/responses/MenuTidakDitemukan'
+        '422':
+          $ref: '#/components/responses/RequestTidakValid'
+        '500':
+          $ref: '#/components/responses/KesalahanInternal'
+
+  /stok/kurangi:
+    post:
+      tags:
+        - Inventori
+      operationId: kurangiStok
+      summary: Mengurangi stok pesanan
+      description: >
+        Mengurangi stok seluruh item secara atomik. kode_pesanan
+        digunakan sebagai kunci idempotensi. Pengulangan request dengan
+        kode_pesanan dan payload yang sama tidak boleh mengurangi stok
+        untuk kedua kalinya.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KurangiStokRequest'
+            example:
+              kode_pesanan: PSN-000001
+              items:
+                - kode_menu: MNU-001
+                  jumlah: 2
+                - kode_menu: MNU-002
+                  jumlah: 1
+      responses:
+        '200':
+          description: Stok berhasil dikurangi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KurangiStokResponse'
+              example:
+                data:
+                  kode_pesanan: PSN-000001
+                  status: stok_dikurangi
+        '404':
+          $ref: '#/components/responses/MenuTidakDitemukan'
+        '409':
+          $ref: '#/components/responses/StokTidakMencukupi'
+        '422':
+          $ref: '#/components/responses/RequestTidakValid'
+        '500':
+          $ref: '#/components/responses/KesalahanInternal'
+
+components:
+  responses:
+    MenuTidakDitemukan:
+      description: Menu tidak ditemukan
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: about:blank
+            title: Menu tidak ditemukan
+            status: 404
+            detail: Menu yang diminta tidak ditemukan.
+            instance: /api/v1/menu/MNU-999
+
+    StokTidakMencukupi:
+      description: Stok salah satu atau beberapa item tidak mencukupi
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: about:blank
+            title: Stok tidak mencukupi
+            status: 409
+            detail: Stok salah satu atau beberapa item tidak mencukupi.
+            instance: /api/v1/stok/kurangi
+
+    RequestTidakValid:
+      description: Request tidak lolos validasi
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblemDetails'
+          example:
+            type: about:blank
+            title: Request tidak valid
+            status: 422
+            detail: Items wajib diisi.
+            instance: /api/v1/stok/cek
+
+    KesalahanInternal:
+      description: Kesalahan internal yang tidak diprediksi
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: about:blank
+            title: Kesalahan internal
+            status: 500
+            detail: Terjadi kesalahan internal yang tidak diprediksi.
+            instance: /api/v1/stok/cek
+
+  schemas:
+    Menu:
+      type: object
+      additionalProperties: false
+      required:
+        - kode_menu
+        - nama_menu
+        - harga_satuan
+        - stok
+      properties:
+        kode_menu:
+          type: string
+          example: MNU-001
+        nama_menu:
+          type: string
+          example: Cafe Latte
+        harga_satuan:
+          type: integer
+          minimum: 0
+          example: 25000
+        stok:
+          type: integer
+          minimum: 0
+          example: 20
+
+    MenuResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/Menu'
+
+    StokItemRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - kode_menu
+        - jumlah
+      properties:
+        kode_menu:
+          type: string
+          example: MNU-001
+        jumlah:
+          type: integer
+          minimum: 1
+          example: 2
+
+    CekStokRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/StokItemRequest'
+
+    HasilCekStokItem:
+      type: object
+      additionalProperties: false
+      required:
+        - kode_menu
+        - jumlah_diminta
+        - stok_tersedia
+        - tersedia
+      properties:
+        kode_menu:
+          type: string
+          example: MNU-001
+        jumlah_diminta:
+          type: integer
+          minimum: 1
+          example: 2
+        stok_tersedia:
+          type: integer
+          minimum: 0
+          example: 20
+        tersedia:
+          type: boolean
+          example: true
+
+    CekStokData:
+      type: object
+      additionalProperties: false
+      required:
+        - tersedia
+        - items
+      properties:
+        tersedia:
+          type: boolean
+          example: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HasilCekStokItem'
+
+    CekStokResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/CekStokData'
+
+    KurangiStokRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - kode_pesanan
+        - items
+      properties:
+        kode_pesanan:
+          type: string
+          example: PSN-000001
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/StokItemRequest'
+
+    KurangiStokData:
+      type: object
+      additionalProperties: false
+      required:
+        - kode_pesanan
+        - status
+      properties:
+        kode_pesanan:
+          type: string
+          example: PSN-000001
+        status:
+          type: string
+          enum:
+            - stok_dikurangi
+          example: stok_dikurangi
+
+    KurangiStokResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/KurangiStokData'
+
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          example: about:blank
+        title:
+          type: string
+          example: Kesalahan
+        status:
+          type: integer
+          example: 500
+        detail:
+          type: string
+          example: Terjadi kesalahan saat memproses request.
+        instance:
+          type: string
+          example: /api/v1/stok/cek
+
+    ValidationProblemDetails:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          description: Problem Details untuk request yang tidak lolos validasi.

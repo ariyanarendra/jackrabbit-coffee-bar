@@ -1,0 +1,17 @@
+{
+  "name": "jackrabbit-coffee-bar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend layanan Jackrabbit Coffee Bar",
+  "scripts": {
+    "lint:openapi": "spectral lint --ruleset .spectral.yaml contracts/pemesanan/openapi.yaml contracts/inventori/openapi.yaml contracts/operasional/openapi.yaml",
+    "validate:asyncapi": "docker run --rm -v \"$PWD:/workspace\" -w /workspace node:24 npx --yes @asyncapi/cli@6.2.2 validate contracts/pemesanan/asyncapi.yaml",
+    "lint:contracts": "npm run lint:openapi && npm run validate:asyncapi"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@stoplight/spectral-cli": "^6.15.0"
+  }
+}

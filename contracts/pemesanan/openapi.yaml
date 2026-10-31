@@ -1,0 +1,387 @@
+openapi: 3.0.3
+
+info:
+  title: API Layanan Pemesanan Jackrabbit Coffee Bar
+  version: 0.1.0
+  description: Kontrak REST design-first untuk Layanan Pemesanan.
+  contact: {}
+
+servers:
+  - url: /api/v1
+    description: Base path API versi 1
+
+tags:
+  - name: Pesanan
+    description: Pembuatan, pembacaan, konfirmasi, dan pembatalan pesanan.
+
+paths:
+  /pesanan:
+    post:
+      tags:
+        - Pesanan
+      operationId: buatPesanan
+      summary: Membuat pesanan baru
+      description: Membuat pesanan dengan status awal menunggu.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuatPesananRequest'
+      responses:
+        '201':
+          description: Pesanan berhasil dibuat
+          headers:
+            Location:
+              description: Lokasi pesanan yang berhasil dibuat
+              schema:
+                type: string
+              example: /api/v1/pesanan/PSN-000001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PesananResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /pesanan/{kode}:
+    parameters:
+      - $ref: '#/components/parameters/KodePesanan'
+    get:
+      tags:
+        - Pesanan
+      operationId: lihatPesanan
+      summary: Melihat detail pesanan
+      description: Mengambil detail satu pesanan berdasarkan kode pesanan.
+      responses:
+        '200':
+          description: Detail pesanan berhasil ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PesananResponse'
+        '404':
+          $ref: '#/components/responses/PesananTidakDitemukan'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /pesanan/{kode}/konfirmasi:
+    parameters:
+      - $ref: '#/components/parameters/KodePesanan'
+    post:
+      tags:
+        - Pesanan
+      operationId: konfirmasiPesanan
+      summary: Mengonfirmasi pesanan
+      description: Memeriksa pesanan dan stok Inventori, mengurangi stok, mengubah status menjadi dikonfirmasi, lalu menerbitkan event PesananDikonfirmasi.
+      responses:
+        '200':
+          description: Pesanan berhasil dikonfirmasi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PesananDikonfirmasiResponse'
+        '404':
+          $ref: '#/components/responses/PesananTidakDitemukan'
+        '409':
+          description: Pesanan tidak dapat dikonfirmasi karena konflik kondisi bisnis
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              examples:
+                statusPesananTidakValid:
+                  summary: Status pesanan tidak memungkinkan
+                  value:
+                    type: https://example.com/problems/status-pesanan-tidak-valid
+                    title: Status pesanan tidak memungkinkan
+                    status: 409
+                    detail: Pesanan PSN-000001 tidak dapat dikonfirmasi karena statusnya sudah dibatalkan.
+                    instance: /api/v1/pesanan/PSN-000001/konfirmasi
+                stokTidakCukup:
+                  summary: Stok tidak mencukupi
+                  value:
+                    type: https://example.com/problems/stok-tidak-cukup
+                    title: Stok tidak mencukupi
+                    status: 409
+                    detail: Stok Cafe Latte tidak mencukupi untuk memenuhi pesanan.
+                    instance: /api/v1/pesanan/PSN-000001/konfirmasi
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /pesanan/{kode}/batal:
+    parameters:
+      - $ref: '#/components/parameters/KodePesanan'
+    post:
+      tags:
+        - Pesanan
+      operationId: batalkanPesanan
+      summary: Membatalkan pesanan
+      description: Membatalkan pesanan yang masih berstatus menunggu.
+      responses:
+        '200':
+          description: Pesanan berhasil dibatalkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PesananDibatalkanResponse'
+        '404':
+          $ref: '#/components/responses/PesananTidakDitemukan'
+        '409':
+          $ref: '#/components/responses/StatusPesananTidakValid'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    KodePesanan:
+      name: kode
+      in: path
+      required: true
+      description: Kode pesanan
+      schema:
+        type: string
+      example: PSN-000001
+
+  responses:
+    ValidationError:
+      description: Request tidak valid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblemDetails'
+
+    PesananTidakDitemukan:
+      description: Pesanan tidak ditemukan
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    StatusPesananTidakValid:
+      description: Status pesanan tidak memungkinkan untuk operasi yang diminta
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    InternalServerError:
+      description: Kesalahan internal yang tidak diprediksi
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    BuatPesananRequest:
+      type: object
+      required:
+        - kanal
+        - nama_pelanggan
+        - items
+      properties:
+        kanal:
+          type: string
+          description: Kanal asal pesanan. Daftar nilai yang diperbolehkan belum diputuskan pada Tahap 7.
+          example: grabfood
+        nama_pelanggan:
+          type: string
+          minLength: 1
+          example: Andi
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BuatPesananItem'
+      example:
+        kanal: grabfood
+        nama_pelanggan: Andi
+        items:
+          - kode_menu: MNU-001
+            nama_menu: Cafe Latte
+            jumlah: 2
+            harga_satuan: 25000
+          - kode_menu: MNU-002
+            nama_menu: Americano
+            jumlah: 1
+            harga_satuan: 20000
+
+    BuatPesananItem:
+      type: object
+      required:
+        - kode_menu
+        - nama_menu
+        - jumlah
+        - harga_satuan
+      properties:
+        kode_menu:
+          type: string
+          example: MNU-001
+        nama_menu:
+          type: string
+          example: Cafe Latte
+        jumlah:
+          type: integer
+          minimum: 1
+          example: 2
+        harga_satuan:
+          type: integer
+          minimum: 0
+          example: 25000
+
+    PesananResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/Pesanan'
+      example:
+        data:
+          kode_pesanan: PSN-000001
+          kanal: grabfood
+          nama_pelanggan: Andi
+          status: menunggu
+          total: 70000
+          items:
+            - kode_menu: MNU-001
+              nama_menu: Cafe Latte
+              jumlah: 2
+              harga_satuan: 25000
+              subtotal: 50000
+            - kode_menu: MNU-002
+              nama_menu: Americano
+              jumlah: 1
+              harga_satuan: 20000
+              subtotal: 20000
+
+    Pesanan:
+      type: object
+      required:
+        - kode_pesanan
+        - kanal
+        - nama_pelanggan
+        - status
+        - total
+        - items
+      properties:
+        kode_pesanan:
+          type: string
+          example: PSN-000001
+        kanal:
+          type: string
+          example: grabfood
+        nama_pelanggan:
+          type: string
+          example: Andi
+        status:
+          type: string
+          enum:
+            - menunggu
+            - dikonfirmasi
+            - dibatalkan
+          example: menunggu
+        total:
+          type: integer
+          minimum: 0
+          example: 70000
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PesananItem'
+
+    PesananItem:
+      type: object
+      required:
+        - kode_menu
+        - nama_menu
+        - jumlah
+        - harga_satuan
+        - subtotal
+      properties:
+        kode_menu:
+          type: string
+          example: MNU-001
+        nama_menu:
+          type: string
+          example: Cafe Latte
+        jumlah:
+          type: integer
+          minimum: 1
+          example: 2
+        harga_satuan:
+          type: integer
+          minimum: 0
+          example: 25000
+        subtotal:
+          type: integer
+          minimum: 0
+          example: 50000
+
+    PesananDikonfirmasiResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - kode_pesanan
+            - status
+          properties:
+            kode_pesanan:
+              type: string
+              example: PSN-000001
+            status:
+              type: string
+              enum:
+                - dikonfirmasi
+              example: dikonfirmasi
+
+    PesananDibatalkanResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - kode_pesanan
+            - status
+          properties:
+            kode_pesanan:
+              type: string
+              example: PSN-000001
+            status:
+              type: string
+              enum:
+                - dibatalkan
+              example: dibatalkan
+              
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          description: URI tipe masalah. Domain final belum diputuskan pada Tahap 7.
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+    ValidationProblemDetails:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          description: Problem Details untuk request yang tidak lolos validasi.
