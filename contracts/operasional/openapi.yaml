@@ -6,6 +6,9 @@ info:
   description: >
     API untuk melihat pesanan yang telah dikonfirmasi dan memperbarui
     status pengerjaannya oleh bagian operasional.
+  contact:
+    name: Tim Integrasi Jackrabbit Coffee Bar
+    url: https://github.com/ariyanarendra/jackrabbit-coffee-bar
 
 servers:
   - url: http://localhost:8082/api/v1
@@ -290,4 +293,4 @@ components:
           example: Status operasional wajib diisi.
         instance:
           type: string
-          example: /api/v1/pesanan/PSN-000001/status
+          example: /api/v1/pesanan/PSN-000001/status
