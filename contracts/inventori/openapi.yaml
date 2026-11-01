@@ -6,6 +6,9 @@ info:
   description: >
     Kontrak REST design-first untuk data menu, pemeriksaan stok,
     dan pengurangan stok.
+  contact:
+    name: Tim Integrasi Jackrabbit Coffee Bar
+    url: https://github.com/ariyanarendra/jackrabbit-coffee-bar
 
 servers:
   - url: /api/v1
@@ -377,4 +380,4 @@ components:
       allOf:
         - $ref: '#/components/schemas/ProblemDetails'
         - type: object
-          description: Problem Details untuk request yang tidak lolos validasi.
+          description: Problem Details untuk request yang tidak lolos validasi.
